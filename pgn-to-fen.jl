@@ -42,31 +42,40 @@ end
 #printFullFen(converter)
 
 
-re = Regex("[0-9]+\.")
 function moves(converter, moves)
-  #println("Moves:", moves)
+  println("Moves function :", moves)
   if typeof(moves) == ASCIIString
-      #println("Moves is a string")
+      println("Moves is a string")
       #Removes 1. and equals from a PGN String.
-      pgnMoves = split(moves, re, keep=false)
-
+      pgnMoves = map(removeNrInFront, split(moves))
+      println("After split: ", pgnMoves)
       pgnToFen(converter, filter(filterNoise, pgnMoves))
   else
-    #println("Move is an array")
+    println("Move is an array")
     pgnToFen(converter, moves)
+  end
+end
+
+function removeNrInFront(chessMove)
+  moveMatch = match(r"^[0-9]+\.(.*)$", chessMove)
+  if typeof(moveMatch) == RegexMatch
+    moveMatch.captures[1]
+  else
+    chessMove
   end
 end
 
 function pgnToFen(converter, moves)
   moveCounter = 1
+  println("Game: ", moves)
   for move in moves
     converter.lastMove = move
     converter.debug && println("=========")
-    converter.debug && println("Movenumber",moveCounter)
-    converter.debug && println("TO MOVE:", converter.whiteToMove ? "w" : "b")
-    converter.debug && println("MOVE:", move)
+    converter.debug && println("Movenumber: ",moveCounter)
+    converter.debug && println("TO MOVE: ", converter.whiteToMove ? "w" : "b")
+    converter.debug && println("MOVE: ", move)
     handleMove(converter, move)
-    converter.debug && println("after move:")
+    converter.debug && println("after move: ")
     converter.debug && println(getFullFen(converter))
     converter.debug && printBoard(converter)
     moveCounter = moveCounter + 1
@@ -88,6 +97,7 @@ end
 
 
 function handleMove(converter, move)
+  println("handleMove: ", handleMove)
   converter.lastMove = move
   handleMoveDetails(converter, move)
   if converter.whiteToMove
@@ -99,26 +109,29 @@ function handleMove(converter, move)
 end
 
 function handleMoveDetails(converter, move)
-  move = move.replace("+", "")
-  move = move.replace("#", "")
+  move = replace(move, "+", "")
+  move = replace(move, "#", "")
   promote = ""
   # Check if last part is a Q,R or N, it"s a common mistake to skip the =
+  println("move: ", move)
+  println("move[end]: ", move[end])
   if move[end-1] in ("Q", "R", "N") && length(findin(move, "=")) == 0
     promote = move[end-1]
     move = move[1:end-1]
   end
-  if lenght(findin(move, "=")) > 0
+  if length(findin(move, "=")) > 0
      promote = move[end-1]
      move = move[1:end-2]
   end
   castelingMove =  match(r"-O", move)
-  if typeof(castelingMove.captures) != nothing
+  if typeof(castelingMove) != Void
      castelingMove(converter, move)
      return;
   end
-  toPosition = move[end-2:end]
-  move = move[0:end-2]
-  if len(move) > 0
+  toPosition = move[end-1:end] #TODO: changed from -2 to -1
+  println("toPosition: ", toPosition)
+  move = move[1:end-1] #TODO: changed from -2 to -1
+  if length(move) > 0
     if move[1] in ["R","N","B","Q","K"]
       piece = move[1]
       move = move[2:end]
@@ -129,7 +142,7 @@ function handleMoveDetails(converter, move)
     piece = "P"
   end
   takes = false
-  if "x" in move
+  if contains(move, "x")
    takes = true
    move = move[1:end-1]
   end
@@ -145,7 +158,7 @@ function handleMoveDetails(converter, move)
       specificRow = move[2]
     end
     if piece == "P"
-      pawnMove(toPosition, specificCol, specificRow, takes, promote)
+      pawnMove(converter, toPosition, specificCol, specificRow, takes, promote)
       return
     end
   elseif piece != "P"
@@ -179,7 +192,7 @@ function handleMoveDetails(converter, move)
 
   setPieceInternal(converter, correctOldPos, "1")
   # Update new pos, should be done after removing old pos, so the board do not contain to many occurens
-  setPiece(converter, toPosition,piece)
+  setPiece(converter, toPosition, piece)
   # Spesial cases
   if piece == "R"
      if correctOldPos["row"] == 0 && correctOldPos["column"] == 0
@@ -232,10 +245,25 @@ function pgnFile(converter, file)
     end
 end
 
+function  columnToInt(char)
+  if char == 'a' 1
+  elseif char == 'b' 2
+  elseif char == 'c' 3
+  elseif char == 'd' 4
+  elseif char == 'e' 5
+  elseif char == 'f' 6
+  elseif char == 'g' 7
+  elseif char == 'h' 8
+  end
+end
+
 function filterNoise(value)
   """
     removes all characters that are not actulle moves
   """
+    if(value == "")
+      return false
+    end
     if(value == "")
       return false
     end
@@ -252,8 +280,69 @@ function filterNoise(value)
   true
 end
 
+function pawnMove(converter, move, specificCol, specificRow, takes, promote)
+  println("pawnMove: ", move)
+    # Update new place with correct piece.
+    if promote != ""
+        piece = converter.whiteToMove ? promote : lower(promote)
+    else
+        piece = converter.whiteToMove ? 'P' : 'p'
+    end
 
+    setPiece(converter, move, piece)
 
+    # Remove correct piece
+    if takes
+        #row is not from 0-7
+        (column, row) =  getColumnRowFromSquare(converter, move)
+        removeFromRow = self.whiteToMove ? (row - 1) : (row + 1)
+        setPieceInternal({"row": removeFromRow, "column":  columnToInt(specificCol)}, "1")
+
+        # Check if it is a enpassant move, and remove the piece if it is
+        if self.enpassant != "-"
+            # print("enpassant move", self.enpassant, move)
+            if self.enpassant == move
+                if conveter.whiteToMove == True
+                    (c, r) =  getColumnRowFromSquare(move)
+                    setPieceInternal({"row": r-1, "column": c}, "1")
+                else
+                    (c, r) =  getColumnRowFromSquare(move)
+                    setPieceInternal({"row": r+1, "column": c}, "1")
+                end
+            end
+        end
+    else
+      # Update old place if just a normal line move
+      piece = converter.whiteToMove ? 'P' : 'p'
+      updatePawnPos(converter, piece, move)
+   end
+ end
+
+function setPiece(converter, square, piece = "1")
+   """
+       :param square: string: the square, eg. 'a1' to 'h8'
+       :param piece: string: a valid piece 'K'|'Q'|'R'|'N'|'B'|'P' or a black counter-part, if you set 1 or just leave it blank and if will use the default parameter
+   """
+    println( "square: ", square)
+    println( "square[1] ", square[1])
+    println( "square[2] ", square[2])
+    println( "piece ", piece)
+    println( "typeof(piece) ", typeof(piece))
+   column = columnToInt(square[1])
+   row = square[2]
+   println("column", column)
+   println("row", row)
+   println("internalChessBoard", converter.internalChessBoard[row, column])
+   converter.internalChessBoard[row, column] = piece
+end
+
+function setPieceInternal(converter, pos, piece)
+   """
+       :param pos: a dict with row and column
+       :param piece: string: a valid piece 'K'|'Q'|'R'|'N'|'B'|'P' or a black counter-part or '1'  (blank field)
+   """
+   converter.internalChessBoard[pos["row"]][pos["column"]] = piece
+end
 
 ## Default values
 fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
@@ -269,7 +358,7 @@ internalChessBoard = [
         ['r' 'n' 'b' 'q' 'k' 'b' 'n' 'r']]
 enpassant = "-"
 castlingRights = "KQkq"
-DEBUG = false
+DEBUG = true
 lastMove = "Before first move"
 fens = []
 result = ""
