@@ -329,10 +329,7 @@ function setPiece(converter, square, piece = "1")
     println( "piece ", piece)
     println( "typeof(piece) ", typeof(piece))
    column = columnToInt(square[1])
-   row = square[2]
-   println("column", column)
-   println("row", row)
-   println("internalChessBoard", converter.internalChessBoard[row, column])
+   row = parse(Int1, square[2])
    converter.internalChessBoard[row, column] = piece
 end
 
@@ -343,6 +340,24 @@ function setPieceInternal(converter, pos, piece)
    """
    converter.internalChessBoard[pos["row"]][pos["column"]] = piece
 end
+
+function updatePawnPos(converter, char, toPosition):
+    """
+        Finds the old posistion to the Pawn, and sets it to blank.
+        Can not be used by pawns that has takken a piece. Only works in a straight line
+    """
+    column, row = __getColumnRowFromSquare(converter, toPosition);
+    oneStep = converter.whiteToMove ? -1 : 1
+    sqaureBehind = BoardPosition( row + oneStep , column)
+    if getPieceInternal(converter, sqaureBehind) == '1':
+        converter.enpassant = getSqaureFromPos(converter, sqaureBehind)
+        enpassant = {'row': row + oneStep*2 , 'column' : column }
+        setPieceInternal(converter, enpassant, '1')
+    else:
+        converter.enpassant = '-'
+        setPieceInternal(converter, sqaureBehind, piece = '1')
+
+
 
 ## Default values
 fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
@@ -375,6 +390,11 @@ type Converter
   lastMove::ASCIIString
   debug::Bool
   fens::Array{AbstractString,1}
+end
+
+type BoardPosition
+  row::Int
+  column::Int
 end
 
 converter = Converter(fen, whiteToMove, castlingRights, internalChessBoard, enpassant, "", lastMove, DEBUG, fens)
